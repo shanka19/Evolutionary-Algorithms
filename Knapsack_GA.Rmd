@@ -1,0 +1,790 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r Loading Libraries}
+
+library(ggplot2)
+
+```
+
+
+```{r Genetic Algorithm Function}
+
+genetic_algorithm_knapsack <- function(n,num_solutions,num_epochs,num_initial_feasible,population_prob,population_number,initialise_population_type,tournament_prob,mutation_prob,crossover_point_min,cross_over_point_max,crossover_type,value,weights,ratio,max_weight,printing)
+{
+  fitness <- function(x,value,max_weight,weights) # Fitness Function Evaluation
+  {
+    objective <- sum(x*value)
+    penalty <- sum(x*weights)-max_weight
+    if(penalty>0)
+    {
+      objective <- 0
+    }
+    return(objective)
+  }
+  
+  flip_bit <- function(x) # Function to flip bits of solution string
+  {
+    if(x==0)
+    {
+      return(1)
+    }
+    else
+    {
+      return(0)
+    }
+  }
+  
+  population_solutions <- list()
+  length(population_solutions) <- num_solutions
+  p <- replicate(n,0)
+  k <- 0
+  
+  if(initialise_population_type=="prob")
+  {
+    for (i in 1:num_solutions)
+    {
+      while(fitness(p,value,max_weight,weights)==0 & k<= num_initial_feasible)
+      {
+        p <- runif(n,min=0,max=1)
+        p[which(p>=population_prob)]<-1
+        p[which(p<population_prob)]<-0
+        population_solutions[[i]]<- p
+      }
+      k <- k + 1
+      p <- replicate(n,0)
+      if (k > num_initial_feasible)
+      {
+        p <- runif(n,min=0,max=1)
+        p[which(p>=population_prob)]<-1
+        p[which(p<population_prob)]<-0
+        population_solutions[[i]]<- p
+      }
+    }
+  }
+  if(initialise_population_type=="deterministic")
+  {
+    k <- 0
+    index <- sort(ratio,decreasing = TRUE,index.return = TRUE)$ix
+    index <- index[1:population_number]
+    for(i in 1:num_solutions)
+    {
+      while(fitness(p,value,max_weight,weights)==0 & k<= num_initial_feasible)
+      {
+        p <- replicate(n,0)
+        index1 <- c(sample(population_number,runif(min=1,max=population_number,1)))
+        p[index[index1]]<- 1
+        population_solutions[[i]]<- p
+      }
+      k <- k + 1
+      if (k > num_initial_feasible)
+      {
+        p <- replicate(n,0)
+        p[sample(n,population_number)]<- 1
+        population_solutions[[i]]<- p
+      }
+      p <- replicate(n,0)
+    }
+  }
+  
+  children <- list()
+  length(children)<- 2
+  fitness_function <- vector()
+  mean_error <- vector()
+  max_error <- vector()
+  tournament_size <- list()
+  length(tournament_size)<- 5
+  solution <- list()
+  num_function_calls <- 0
+  for (i in 1:length(population_solutions))
+  {
+      fitness_function[i]<- fitness(population_solutions[[i]],value,max_weight,weights)
+      num_function_calls <- num_function_calls + 1
+  }
+  
+  for (epochs in 1:num_epochs)
+  {
+    k <- 0
+    rand_number <- round(runif(min=crossover_point_min,max=cross_over_point_max,1),0)
+    index <- sort(fitness_function,decreasing = TRUE,index.return = TRUE)$ix
+    tournament_size <- population_solutions[c(sample(num_solutions,5))]
+    
+    population_solutions_best <- tournament_size[c(sample(5,2,prob = c(tournament_prob,tournament_prob*(1-tournament_prob),tournament_prob*(1-tournament_prob)^2,tournament_prob*(1-tournament_prob)^3,tournament_prob*(1-tournament_prob)^4)))]
+    
+    if(crossover_type=="point")
+    {
+      j = 2
+      for (i in 1:2)
+      {
+        children[[i]]<- c(population_solutions_best[[i]][1:rand_number],population_solutions_best[[j]][rand_number+1:n])
+        j = j-1
+        children[[i]]<- children[[i]][1:n]
+      }
+    }
+    if(crossover_type=="uniform")
+    {
+      for(i in 1:2)
+      {
+        for(j in 1:n)
+        {
+          rand_number_crossover <- runif(min=0,max=1,1)
+          if(rand_number_crossover<=0.5)
+          {
+            children[[i]][j]<- population_solutions_best[[1]][j]
+          }
+          else
+          {
+            children[[i]][j]<- population_solutions_best[[2]][j]
+          }
+        }
+      }
+      
+    }
+  
+  # Mutation of solution with certain probability
+    rand_mutation <- runif(min=0,max=1,1)
+    for (i in 1:2)
+    {
+      for (j in 1:n)
+      {
+        if(rand_mutation<=(mutation_prob)/epochs)
+        {
+          children[[i]][j]<- flip_bit(children[[i]][j])
+        }
+      }
+    }
+    
+    # Decision to add children to population
+    for (i in 1:2)
+    {
+      indexes <- which(population_solutions %in% list(children[[i]]))
+      if(length(indexes)>0)
+      {
+        k <- k + 1
+        add_index <- i
+      }
+      
+    }
+    len_population_solutions <- length(population_solutions)
+    len_fitness_function <- length(fitness_function)
+    if(k==0)
+    {
+      population_solutions <- c(population_solutions,children)
+      for(i in 1:2)
+      {
+        fitness_function[len_fitness_function+i]<-fitness(population_solutions[[len_population_solutions+i]],value,max_weight,weights)
+        num_function_calls <- num_function_calls + 1
+      }
+      index <- sort(fitness_function,decreasing = FALSE,index.return = TRUE)$ix
+      removal_index <- index[c(sample(num_solutions/2,2))]
+      population_solutions <- population_solutions[-removal_index]
+      fitness_function <- fitness_function[-removal_index]
+    }
+    else if(k==1)
+    {
+      population_solutions <- c(population_solutions,children[add_index])
+      fitness_function[len_fitness_function+1]<-fitness(population_solutions[[len_population_solutions+1]],value,max_weight,weights)
+      num_function_calls <- num_function_calls + 1
+      index <- sort(fitness_function,decreasing = FALSE,index.return = TRUE)$ix
+      removal_index <- index[c(sample(num_solutions/2,1))]
+      population_solutions <- population_solutions[-removal_index]
+      fitness_function <- fitness_function[-removal_index]
+    }
+    mean_error[epochs]<- mean(fitness_function)
+    max_error[epochs]<- max(fitness_function)
+    
+    if(printing==TRUE)
+    {
+      print_line <- paste("Generation Number: ",epochs," ","Fitness Value: ",mean_error[epochs])
+    
+      writeLines(print_line)
+    }
+  }
+  solution <- population_solutions[[which.max(fitness_function)]]
+  
+  return(list(Mean_Fitness = mean_error,Max_Fitness = max_error,Solution = solution,num_calls = num_function_calls))
+}
+```
+
+```{r Fitness Function}
+
+fitness <- function(x,value,max_weight,weights) # Fitness Function Evaluation
+  {
+    objective <- sum(x*value)
+    penalty <- sum(x*weights)-max_weight
+    if(penalty>0)
+    {
+      objective <- 0
+    }
+    return(objective)
+  }
+
+
+```
+
+
+
+```{r Loading the datasets in R}
+
+# Problem 1
+
+knapPI_11_100_1000 <- read.csv("C:/Users/Anirudh Shankar/Desktop/Fall 2019/Nature Inspired Computation/Homeworks/knapPI_11_100_1000.csv")
+value_problem1 <- knapPI_11_100_1000["Value"]
+weights_problem1 <- knapPI_11_100_1000["Weights"]
+knapPI_11_100_1000$Ratio <- knapPI_11_100_1000$Value/knapPI_11_100_1000$Weights
+ratio_problem1 <- knapPI_11_100_1000["Ratio"]
+
+
+# Problem 2
+
+knapPI_13_50_1000 <- read.csv("C:/Users/Anirudh Shankar/Desktop/Fall 2019/Nature Inspired Computation/Homeworks/knapPI_13_50_1000.csv")
+value_problem2 <- knapPI_13_50_1000["Value"]
+weights_problem2 <- knapPI_13_50_1000["Weights"]
+knapPI_13_50_1000$Ratio <- knapPI_13_50_1000$Value/knapPI_13_50_1000$Weights
+ratio_problem2 <- knapPI_13_50_1000["Ratio"]
+
+# Problem 3
+
+knapPI_13_200_1000 <- read.csv("C:/Users/Anirudh Shankar/Desktop/Fall 2019/Nature Inspired Computation/Homeworks/knapPI_13_200_1000.csv")
+value_problem3 <- knapPI_13_200_1000["Value"]
+weights_problem3 <- knapPI_13_200_1000["Weights"]
+knapPI_13_200_1000$Ratio <- knapPI_13_200_1000$Value/knapPI_13_200_1000$Weights
+ratio_problem3 <- knapPI_13_200_1000["Ratio"]
+
+# Problem 4
+
+knapPI_14_50_1000 <- read.csv("C:/Users/Anirudh Shankar/Desktop/Fall 2019/Nature Inspired Computation/Homeworks/knapPI_14_50_1000.csv")
+value_problem4 <- knapPI_14_50_1000["Value"]
+weights_problem4 <- knapPI_14_50_1000["Weights"]
+knapPI_14_50_1000$Ratio <- knapPI_14_50_1000$Value/knapPI_14_50_1000$Weights
+ratio_problem4 <- knapPI_14_50_1000["Ratio"]
+
+# Problem 5
+
+knapPI_15_50_1000 <- read.csv("C:/Users/Anirudh Shankar/Desktop/Fall 2019/Nature Inspired Computation/Homeworks/knapPI_15_50_1000.csv")
+value_problem5 <- knapPI_15_50_1000["Value"]
+weights_problem5 <- knapPI_15_50_1000["Weights"]
+knapPI_15_50_1000$Ratio <- knapPI_15_50_1000$Value/knapPI_15_50_1000$Weights
+ratio_problem5 <- knapPI_15_50_1000["Ratio"]
+
+# Problem 6
+
+knapPI_16_50_1000 <- read.csv("C:/Users/Anirudh Shankar/Desktop/Fall 2019/Nature Inspired Computation/Homeworks/knapPI_16_50_1000.csv")
+value_problem6 <- knapPI_16_50_1000["Value"]
+weights_problem6 <- knapPI_16_50_1000["Weights"]
+knapPI_16_50_1000$Ratio <- knapPI_16_50_1000$Value/knapPI_16_50_1000$Weights
+ratio_problem6 <- knapPI_16_50_1000["Ratio"]
+
+```
+
+
+```{r Running the GA on benchmark datasets with single point crossover}
+
+for (i in 1:5)
+{
+  set.seed(123)
+  ans_problem_1[[i]] <- genetic_algorithm_knapsack(100,10,2000,5,0.95,5,"deterministic",0.8,0.01*i,0,100,"point",value_problem1,weights_problem1,ratio_problem1$Ratio,970,printing = TRUE)
+}
+
+for (i in 1:5)
+{
+  set.seed(123)
+  ans_problem_1_prob[[i]] <- genetic_algorithm_knapsack(100,20,2000,5,0.96,10,"prob",0.8,0.01*i,0,100,"point",value_problem1,weights_problem1$Weights,ratio_problem1$Ratio,970,printing = TRUE)
+}
+
+for(i in 1:5)
+{
+  set.seed(123)
+  ans_problem_2[[i]] <- genetic_algorithm_knapsack(50,20,2000,10,0.9,10,"deterministic",0.8,0.01*i,0,100,"point",value_problem2,weights_problem2$Weights,ratio_problem2$Ratio,970,printing = TRUE)
+}
+
+for(i in 1:5)
+{
+  set.seed(123)
+  ans_problem_2_prob[[i]] <- genetic_algorithm_knapsack(50,10,2000,5,0.9,10,"prob",0.8,0.01*i,0,100,"point",value_problem2,weights_problem2$Weights,ratio_problem2$Ratio,970,printing = TRUE)
+}
+
+for(i in 1:5)
+{
+  set.seed(123)
+  ans_problem_3[[i]] <- genetic_algorithm_knapsack(200,100,2000,50,0.8,10,"deterministic",0.8,0.01*i,0,100,"point",value_problem3,weights_problem3$Weights,ratio_problem3$Ratio,970,printing = TRUE)
+}
+
+for(i in 1:5)
+{
+  set.seed(123)
+  ans_problem_3_prob[[i]] <- genetic_algorithm_knapsack(200,50,2000,30,0.95,10,"prob",0.8,0.01*i,0,100,"point",value_problem3,weights_problem3,ratio_problem3$Ratio,970,printing = TRUE)
+}
+
+for(i in 1:5)
+{
+  set.seed(123)
+  ans_problem_4[[i]] <- genetic_algorithm_knapsack(50,30,2000,20,0.95,10,"deterministic",0.8,0.01*i,0,100,"point",value_problem4,weights_problem4$Weights,ratio_problem4$Ratio,997,printing = TRUE)
+}
+
+for(i in 1:5)
+{
+  set.seed(123)
+  ans_problem_4_prob[[i]] <- genetic_algorithm_knapsack(50,10,3000,5,0.95,10,"prob",0.8,0.01*i,0,100,"point",value_problem4,weights_problem4$Weights,ratio_problem4$Ratio,997,printing = TRUE)
+}
+
+for(i in 1:5)
+{
+  set.seed(123)
+ans_problem_5[[i]] <- genetic_algorithm_knapsack(50,30,3000,20,0.95,10,"deterministic",0.8,0.01*i,0,100,"point",value_problem5,weights_problem5$Weights,ratio_problem5$Ratio,997,printing = TRUE)
+}
+
+for(i in 1:5)
+{
+  set.seed(123)
+ans_problem_5_prob[[i]] <- genetic_algorithm_knapsack(50,10,3000,5,0.95,10,"prob",0.8,0.01*i,0,100,"point",value_problem5,weights_problem5$Weights,ratio_problem5$Ratio,997,printing = TRUE)
+}
+
+for(i in 1:5)
+{
+  set.seed(123)
+  ans_problem_6_prob[[i]] <- genetic_algorithm_knapsack(50,10,3000,5,0.95,10,"prob",0.8,0.01*i,0,100,"point",value_problem6,weights_problem6,ratio_problem6$Ratio,997,printing = TRUE)
+}
+
+for(i in 1:5)
+{
+  set.seed(123)
+  ans_problem_6[[i]] <- genetic_algorithm_knapsack(50,30,3000,20,0.95,10,"deterministic",0.8,0.01*i,0,100,"point",value_problem6,weights_problem6$Weights,ratio_problem6$Ratio,997,printing = TRUE)
+}
+
+
+```
+
+```{r Plot for Singple Point Cross over}
+
+# Plots for Problem 1
+
+df <- data.frame(c(0.01,0.02,0.03,0.04,0.05))
+
+for(i in 1:5)
+{
+  df$Num_Calls_Point[i]<-ans_problem_6[[i]]$num_calls
+  df$Num_Calls_Uniform[i]<-ans_problem_6_uniform[[i]]$num_calls
+}
+colnames(df)[1]<- "Mutation_Rate"
+df <- melt(df,"Mutation_Rate")
+g <- ggplot(df,aes(x=Mutation_Rate,y=value,color=variable))+geom_line()+ggtitle("Function Calls for Uniform and Single Point Crossover across mutation rates(Problem 6)")+xlab("Mutation Rate")+ylab("Number of Function Calls")+scale_color_manual(labels = c("Single Point Crossover","Uniform Crossover"),values = c("blue", "red"))
+
+```
+
+
+
+```{r Running the GA on benchmark datasets with uniform crossover}
+
+ans_problem_1_uniform <- list()
+ans_problem_1_prob_uniform <- list()
+ans_problem_2_uniform <- list()
+ans_problem_2_prob_uniform <- list()
+ans_problem_3_uniform <- list()
+ans_problem_3_prob_uniform <- list()
+ans_problem_4_uniform <- list()
+ans_problem_4_prob_uniform <- list()
+ans_problem_5_uniform <- list()
+ans_problem_5_prob_uniform <- list()
+ans_problem_6_uniform <- list()
+ans_problem_6_prob_uniform <- list()
+
+
+for (i in 1:5)
+{
+  set.seed(123)
+  ans_problem_1_uniform[[i]] <- genetic_algorithm_knapsack(100,10,2000,5,0.95,5,"deterministic",0.8,0.01*i,0,100,"uniform",value_problem1,weights_problem1,ratio_problem1$Ratio,970,printing = TRUE)
+}
+
+for (i in 1:5)
+{
+  set.seed(123)
+  ans_problem_1_prob_uniform[[i]] <- genetic_algorithm_knapsack(100,20,2000,5,0.96,10,"prob",0.8,0.01*i,0,100,"uniform",value_problem1,weights_problem1$Weights,ratio_problem1$Ratio,970,printing = TRUE)
+}
+
+for(i in 1:5)
+{
+  set.seed(123)
+  ans_problem_2_uniform[[i]] <- genetic_algorithm_knapsack(50,20,2000,10,0.9,10,"deterministic",0.8,0.01*i,0,100,"uniform",value_problem2,weights_problem2$Weights,ratio_problem2$Ratio,970,printing = TRUE)
+}
+
+for(i in 1:5)
+{
+  set.seed(123)
+  ans_problem_2_prob_uniform[[i]] <- genetic_algorithm_knapsack(50,10,2000,5,0.9,10,"prob",0.8,0.01*i,0,100,"uniform",value_problem2,weights_problem2$Weights,ratio_problem2$Ratio,970,printing = TRUE)
+}
+
+for(i in 1:5)
+{
+  set.seed(123)
+  ans_problem_3_uniform[[i]] <- genetic_algorithm_knapsack(200,100,2000,50,0.8,10,"deterministic",0.8,0.01*i,0,100,"uniform",value_problem3,weights_problem3$Weights,ratio_problem3$Ratio,970,printing = TRUE)
+}
+
+for(i in 1:5)
+{
+  set.seed(123)
+  ans_problem_3_prob_uniform[[i]] <- genetic_algorithm_knapsack(200,50,2000,30,0.95,10,"prob",0.8,0.01*i,0,100,"uniform",value_problem3,weights_problem3,ratio_problem3$Ratio,970,printing = TRUE)
+}
+
+for(i in 1:5)
+{
+  set.seed(123)
+  ans_problem_4_uniform[[i]] <- genetic_algorithm_knapsack(50,30,2000,20,0.95,10,"deterministic",0.8,0.01*i,0,100,"uniform",value_problem4,weights_problem4$Weights,ratio_problem4$Ratio,997,printing = TRUE)
+}
+
+for(i in 1:5)
+{
+  set.seed(123)
+  ans_problem_4_prob_uniform[[i]] <- genetic_algorithm_knapsack(50,10,3000,5,0.95,10,"prob",0.8,0.01*i,0,100,"uniform",value_problem4,weights_problem4$Weights,ratio_problem4$Ratio,997,printing = TRUE)
+}
+
+for(i in 1:5)
+{
+  set.seed(123)
+ans_problem_5_uniform[[i]] <- genetic_algorithm_knapsack(50,30,3000,20,0.95,10,"deterministic",0.8,0.01*i,0,100,"uniform",value_problem5,weights_problem5$Weights,ratio_problem5$Ratio,997,printing = TRUE)
+}
+
+for(i in 1:5)
+{
+  set.seed(123)
+ans_problem_5_prob_uniform[[i]] <- genetic_algorithm_knapsack(50,10,3000,5,0.95,10,"prob",0.8,0.01*i,0,100,"uniform",value_problem5,weights_problem5$Weights,ratio_problem5$Ratio,997,printing = TRUE)
+}
+
+for(i in 1:5)
+{
+  set.seed(123)
+  ans_problem_6_prob_uniform[[i]] <- genetic_algorithm_knapsack(50,10,3000,5,0.95,10,"prob",0.8,0.01*i,0,100,"uniform",value_problem6,weights_problem6,ratio_problem6$Ratio,997,printing = TRUE)
+}
+
+for(i in 1:5)
+{
+  set.seed(123)
+  ans_problem_6_uniform[[i]] <- genetic_algorithm_knapsack(50,30,3000,20,0.95,10,"deterministic",0.8,0.01*i,0,100,"uniform",value_problem6,weights_problem6$Weights,ratio_problem6$Ratio,997,printing = TRUE)
+}
+
+```
+
+```{r Random Search Comparision with best algorithms in part A}
+
+vec <- vector()
+vec1 <- vector()
+vec2 <- vector()
+vec3 <- vector()
+
+for(i in 1:5)
+{
+  vec[i] <- mean(ans_problem_1[[i]]$Mean_Fitness)
+  vec1[i]<- mean(ans_problem_1_prob[[i]]$Mean_Fitness)
+  vec2[i]<- mean(ans_problem_1_uniform[[i]]$Mean_Fitness)
+  vec3[i]<- mean(ans_problem_1_prob_uniform[[i]]$Mean_Fitness)
+}
+which.max(vec3)
+best_solution_problem_1 <- ans_problem_1_prob_uniform[[1]]$Solution
+best_num_calls_problem_1 <- ans_problem_1_prob_uniform[[1]]$num_calls
+random_solutions_problem_1 <- list()
+best_solution_problem1_random<- vector()
+
+for(j in 1:5)
+{
+  for(i in 1:best_num_calls_problem_1)
+  {
+    p <- runif(min=0,max=1,100)
+    p[which(p>=0.9)]<- 1
+    p[-which(p>=0.9)]<- 0
+    random_solutions_problem_1[[i]]<- p
+  }
+  fitness_random_solutions_problem_1 <- vector()
+  for(i in 1:best_num_calls_problem_1)
+  {
+    fitness_random_solutions_problem_1[[i]]<-   fitness(random_solutions_problem_1[[i]],value_problem1,970,weights_problem1)
+  }
+  best_solution_problem1_random[[j]] <- max(fitness_random_solutions_problem_1)
+}
+
+best_solution_problem2_random<- vector()
+for(i in 1:5)
+{
+  vec[i] <- mean(ans_problem_2[[i]]$Mean_Fitness)
+  vec1[i]<- mean(ans_problem_2_prob[[i]]$Mean_Fitness)
+  vec2[i]<- mean(ans_problem_2_uniform[[i]]$Mean_Fitness)
+  vec3[i]<- mean(ans_problem_2_prob_uniform[[i]]$Mean_Fitness)
+}
+which.max(vec3)
+best_solution_problem_2 <- ans_problem_2_prob_uniform[[2]]$Solution
+best_num_calls_problem_2 <- ans_problem_2_prob_uniform[[2]]$num_calls
+random_solutions_problem_2 <- list()
+
+for(j in 1:5)
+{
+  for(i in 1:best_num_calls_problem_2)
+  {
+    p <- runif(min=0,max=1,50)
+    p[which(p>=0.9)]<- 1
+    p[-which(p>=0.9)]<- 0
+    random_solutions_problem_2[[i]]<- p
+  }
+  fitness_random_solutions_problem_2 <- vector()
+  for(i in 1:best_num_calls_problem_2)
+  {
+    fitness_random_solutions_problem_2[[i]]<- fitness(random_solutions_problem_2[[i]],value_problem2,970,weights_problem2)
+  }
+best_solution_problem2_random[[j]] <- max(fitness_random_solutions_problem_2)
+}
+
+for(i in 1:5)
+{
+  vec[i] <- mean(ans_problem_3[[i]]$Mean_Fitness)
+  vec1[i]<- mean(ans_problem_3_prob[[i]]$Mean_Fitness)
+  vec2[i]<- mean(ans_problem_3_uniform[[i]]$Mean_Fitness)
+  vec3[i]<- mean(ans_problem_3_prob_uniform[[i]]$Mean_Fitness)
+}
+which.max(vec2)
+best_solution_problem_3 <- ans_problem_3_uniform[[1]]$Solution
+best_num_calls_problem_3 <- ans_problem_3_uniform[[1]]$num_calls
+random_solutions_problem_3 <- list()
+best_solution_problem3_random <- vector()
+
+for(j in 1:5)
+{
+  for(i in 1:best_num_calls_problem_3)
+  {
+    p <- runif(min=0,max=1,200)
+    p[which(p>=0.9)]<- 1
+    p[-which(p>=0.9)]<- 0
+    random_solutions_problem_3[[i]]<- p
+  }
+  fitness_random_solutions_problem_3 <- vector()
+  for(i in 1:best_num_calls_problem_3)
+  {
+    fitness_random_solutions_problem_3[[i]]<- fitness(random_solutions_problem_3[[i]],value_problem3,970,weights_problem3)
+  }
+  best_solution_problem3_random[[j]] <- max(fitness_random_solutions_problem_3)
+}
+
+for(i in 1:5)
+{
+  vec[i] <- mean(ans_problem_4[[i]]$Mean_Fitness)
+  vec1[i]<- mean(ans_problem_4_prob[[i]]$Mean_Fitness)
+  vec2[i]<- mean(ans_problem_4_uniform[[i]]$Mean_Fitness)
+  vec3[i]<- mean(ans_problem_4_prob_uniform[[i]]$Mean_Fitness)
+}
+which.max(vec2)
+best_solution_problem_4 <- ans_problem_4_uniform[[2]]$Solution
+best_num_calls_problem_4 <- ans_problem_4_uniform[[2]]$num_calls
+random_solutions_problem_4 <- list()
+best_solution_problem4_random <- vector()
+
+for(j in 1:5)
+{
+  for(i in 1:best_num_calls_problem_4)
+  {
+    p <- runif(min=0,max=1,50)
+    p[which(p>=0.9)]<- 1
+    p[-which(p>=0.9)]<- 0
+    random_solutions_problem_4[[i]]<- p
+  }
+  fitness_random_solutions_problem_4 <- vector()
+  for(i in 1:best_num_calls_problem_4)
+  {
+    fitness_random_solutions_problem_4[[i]]<- fitness(random_solutions_problem_4[[i]],value_problem4,997,weights_problem4)
+  }
+  best_solution_problem4_random[[j]] <- max(fitness_random_solutions_problem_4)
+}
+
+for(i in 1:5)
+{
+  vec[i] <- mean(ans_problem_5[[i]]$Mean_Fitness)
+  vec1[i]<- mean(ans_problem_5_prob[[i]]$Mean_Fitness)
+  vec2[i]<- mean(ans_problem_5_uniform[[i]]$Mean_Fitness)
+  vec3[i]<- mean(ans_problem_5_prob_uniform[[i]]$Mean_Fitness)
+}
+which.max(vec1)
+best_solution_problem_5 <- ans_problem_5_prob[[1]]$Solution
+best_num_calls_problem_5 <- ans_problem_5_prob[[1]]$num_calls
+random_solutions_problem_5 <- list()
+best_solution_problem5_random <- vector()
+
+for(j in 1:5)
+{
+  for(i in 1:best_num_calls_problem_5)
+  {
+    p <- runif(min=0,max=1,50)
+    p[which(p>=0.9)]<- 1
+    p[-which(p>=0.9)]<- 0
+    random_solutions_problem_5[[i]]<- p
+  }
+  fitness_random_solutions_problem_5 <- vector()
+  for(i in 1:best_num_calls_problem_5)
+  {
+    fitness_random_solutions_problem_5[[i]]<- fitness(random_solutions_problem_5[[i]],value_problem5,997,weights_problem5)
+  }
+  best_solution_problem5_random[[j]] <- max(fitness_random_solutions_problem_5)
+}
+
+for(i in 1:5)
+{
+  vec[i] <- mean(ans_problem_6[[i]]$Mean_Fitness)
+  vec1[i]<- mean(ans_problem_6_prob[[i]]$Mean_Fitness)
+  vec2[i]<- mean(ans_problem_6_uniform[[i]]$Mean_Fitness)
+  vec3[i]<- mean(ans_problem_6_prob_uniform[[i]]$Mean_Fitness)
+}
+which.max(vec2)
+best_solution_problem_6 <- ans_problem_6_prob[[5]]$Solution
+best_num_calls_problem_6 <- ans_problem_6_prob[[5]]$num_calls
+random_solutions_problem_6 <- list()
+best_solution_problem6_random <- vector()
+
+for(j in 1:5)
+{
+  for(i in 1:best_num_calls_problem_6)
+  {
+    p <- runif(min=0,max=1,50)
+    p[which(p>=0.9)]<- 1
+    p[-which(p>=0.9)]<- 0
+    random_solutions_problem_6[[i]]<- p
+  }
+  fitness_random_solutions_problem_6 <- vector()
+  for(i in 1:best_num_calls_problem_6)
+  {
+    fitness_random_solutions_problem_6[[i]]<- fitness(random_solutions_problem_6[[i]],value_problem6,997,weights_problem6)
+  }
+  best_solution_problem6_random[[j]] <- max(fitness_random_solutions_problem_6)
+}
+
+```
+
+```{r GA Best Algorithms}
+
+ga_best_problem1 <- vector()
+ga_best_problem2 <- vector()
+ga_best_problem3 <- vector()
+ga_best_problem4 <- vector()
+ga_best_problem5 <- vector()
+ga_best_problem6 <- vector()
+
+for (i in 1:5)
+{
+  ga_best_problem1[i] <- max(genetic_algorithm_knapsack(100,20,2000,5,0.96,10,"prob",0.8,0.01,0,100,"uniform",value_problem1,weights_problem1$Weights,ratio_problem1$Ratio,970,printing = TRUE)$Max_Fitness)
+}
+
+for(i in 1:5)
+{
+  ga_best_problem2[i] <- max(genetic_algorithm_knapsack(50,10,2000,5,0.9,10,"prob",0.8,0.02,0,100,"uniform",value_problem2,weights_problem2$Weights,ratio_problem2$Ratio,970,printing = TRUE)$Max_Fitness)
+}
+
+for(i in 1:5)
+{
+
+   ga_best_problem3[i]<- max(genetic_algorithm_knapsack(200,100,2000,50,0.8,10,"deterministic",0.8,0.01,0,100,"uniform",value_problem3,weights_problem3$Weights,ratio_problem3$Ratio,970,printing = TRUE)$Max_Fitness)
+}
+
+for(i in 1:5)
+{
+  ga_best_problem4[i] <- max(genetic_algorithm_knapsack(50,30,2000,20,0.95,10,"deterministic",0.8,0.02,0,100,"uniform",value_problem4,weights_problem4$Weights,ratio_problem4$Ratio,997,printing = TRUE)$Max_Fitness)
+}
+
+for(i in 1:5)
+{
+  ga_best_problem5[i] <- max(genetic_algorithm_knapsack(50,30,3000,20,0.95,10,"deterministic",0.8,0.02,0,100,"point",value_problem5,weights_problem5$Weights,ratio_problem5$Ratio,997,printing = TRUE)$Max_Fitness)
+}
+
+for(i in 1:5)
+{
+  ga_best_problem6[i] <- max(genetic_algorithm_knapsack(50,30,3000,20,0.95,10,"deterministic",0.8,0.04,0,100,"point",value_problem6,weights_problem6$Weights,ratio_problem6$Ratio,997,printing = TRUE)$Max_Fitness)
+}
+
+
+```
+
+
+
+```{r Comparision of Random Search with best of part A graphs}
+
+df <- data.frame(c(1:5))
+
+df[,"P1_Random"]<- best_solution_problem1_random
+df[,"P2_Random"]<-best_solution_problem2_random
+df[,"P3_Random"]<-best_solution_problem3_random
+df[,"P4_Random"]<-best_solution_problem4_random
+df[,"P5_Random"]<-best_solution_problem5_random
+df[,"P6_Random"]<-best_solution_problem6_random
+df[,"P1"]<- ga_best_problem1
+df[,"P2"]<-ga_best_problem2
+df[,"P3"]<-ga_best_problem3
+df[,"P4"]<-ga_best_problem4
+df[,"P5"]<-ga_best_problem5
+df[,"P6"]<-ga_best_problem6
+colnames(df)[1]<-"Sample_Name"
+df <- melt(df,"Sample_Name")
+
+g <- ggplot(df,aes(x=Sample_Name,y=value,color=variable))+geom_boxplot()+ggtitle("Performance comparision between GA and Random Search Solutions")+xlab("Sample_Number")+ylab("Fitness Value")+scale_x_continuous(breaks = seq(1,7,1))
+
+
+```
+
+
+```{r Question 3 devising own mutation and crossover strategy}
+
+# Devising own crossover strategy
+
+ans_problem_1_cross_strategy<- genetic_algorithm_knapsack(100,10,2000,5,0.95,5,"deterministic",0.8,0.01,50,50,"point",value_problem1,weights_problem1,ratio_problem1$Ratio,970,printing = TRUE)
+
+ans_problem_2_cross_strategy<- genetic_algorithm_knapsack(50,20,2000,10,0.9,10,"deterministic",0.8,0.01,100,100,"point",value_problem2,weights_problem2$Weights,ratio_problem2$Ratio,970,printing = TRUE)
+
+ans_problem_3_cross_strategy<- genetic_algorithm_knapsack(200,100,2000,50,0.8,10,"deterministic",0.8,0.01,25,25,"point",value_problem3,weights_problem3$Weights,ratio_problem3$Ratio,970,printing = TRUE)
+
+ans_problem_4_cross_strategy<- genetic_algorithm_knapsack(50,30,2000,20,0.95,10,"deterministic",0.8,0.01,25,25,"point",value_problem4,weights_problem4$Weights,ratio_problem4$Ratio,997,printing = TRUE)
+
+ans_problem_5_cross_strategy<- genetic_algorithm_knapsack(50,30,3000,20,0.95,10,"deterministic",0.8,0.01,25,25,"point",value_problem5,weights_problem5$Weights,ratio_problem5$Ratio,997,printing = TRUE)
+
+ans_problem_6_cross_strategy<- genetic_algorithm_knapsack(50,30,3000,20,0.95,10,"deterministic",0.8,0.01,25,25,"point",value_problem6,weights_problem6$Weights,ratio_problem6$Ratio,997,printing = TRUE)
+
+
+```
+
+
+```{r Adaptive Mutation Strategy}
+
+ans_problem_1_mutation_strategy<- list()
+ans_problem_2_mutation_strategy<- list()
+ans_problem_3_mutation_strategy<- list()
+ans_problem_4_mutation_strategy<- list()
+ans_problem_5_mutation_strategy<- list()
+ans_problem_6_mutation_strategy<- list()
+
+ans_problem_1_mutation_strategy <- genetic_algorithm_knapsack(100,10,2000,5,0.95,5,"deterministic",0.8,0.2,50,50,"point",value_problem1,weights_problem1,ratio_problem1$Ratio,970,printing = TRUE)
+
+set.seed(123)
+ans_problem_2_mutation_strategy<-genetic_algorithm_knapsack(50,20,2000,10,0.9,10,"deterministic",0.8,0.2,100,100,"point",value_problem2,weights_problem2$Weights,ratio_problem2$Ratio,970,printing = TRUE)
+
+set.seed(123)
+ans_problem_3_mutation_strategy<- genetic_algorithm_knapsack(200,100,2000,50,0.8,10,"deterministic",0.8,0.2,25,25,"point",value_problem3,weights_problem3$Weights,ratio_problem3$Ratio,970,printing = TRUE)
+
+set.seed(123)
+ans_problem_4_mutation_strategy <- genetic_algorithm_knapsack(50,30,2000,20,0.95,10,"deterministic",0.8,0.2,25,25,"point",value_problem4,weights_problem4$Weights,ratio_problem4$Ratio,997,printing = TRUE)
+
+set.seed(123)
+ans_problem_5_mutation_strategy <-genetic_algorithm_knapsack(50,30,3000,20,0.95,10,"deterministic",0.8,0.2,25,25,"point",value_problem5,weights_problem5$Weights,ratio_problem5$Ratio,997,printing = TRUE)
+
+
+set.seed(123)
+ans_problem_6_mutation_strategy<- genetic_algorithm_knapsack(50,30,3000,20,0.95,10,"deterministic",0.8,0.2,25,25,"point",value_problem6,weights_problem6$Weights,ratio_problem6$Ratio,997,printing = TRUE)
+
+```
+
+```{r Graphs of devised crossover and mutation strategy}
+
+df <- data.frame(c(1:2000))
+df$Mean_Fitness_original_strategy <- ans_problem_1_prob_uniform[[1]]$Mean_Fitness
+df$Mean_Fitness_mutation_strategy <- ans_problem_1_mutation_strategy$Mean_Fitness
+df$Max_Fitness_original_strategy <- ans_problem_1_prob_uniform[[1]]$Max_Fitness
+df$Max_Fitness_mutation_strategy <- ans_problem_1_mutation_strategy$Max_Fitness
+colnames(df)[1]<- "Iterations"
+df <- melt(df,"Iterations")
+
+g <- ggplot(df,aes(x=Iterations,y=value,color=variable))+geom_line()+ggtitle("Performance comparision between orginal and devised mutation strategy(Problem 1)")+xlab("Iterations")+ylab("Fitness Value")
+
+```
+

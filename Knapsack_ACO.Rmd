@@ -1,0 +1,325 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r Loading Libraries in R}
+
+library(gramEvol)
+library(evoper)
+library(rgp)
+library(ggplot2)
+library(tidyverse)
+library(reshape2)
+
+```
+
+```{r Loading Datasets in R}
+
+data1 <- read.csv("C:/Users/Anirudh Shankar/Desktop/Fall 2019/Nature Inspired Computation/Homeworks/data1.csv")
+data2 <- read.csv("C:/Users/Anirudh Shankar/Desktop/Fall 2019/Nature Inspired Computation/Homeworks/data2.csv")
+
+```
+
+```{r Q.1 a}
+
+set.seed(123)
+function_set1 <- functionSet("+","-")
+function_set2 <- functionSet("+","*","-")
+function_set3 <- functionSet("+","*","-","exp")
+function_set4 <- functionSet("+","*","-","exp","sqrt")
+
+results_q1a1 <- symbolicRegression(y~x,data = data1, functionSet = function_set1)
+results_q1a2 <- symbolicRegression(y~x,data = data1, functionSet = function_set2)
+results_q1a3 <- symbolicRegression(y~x,data = data1, functionSet = function_set3)
+results_q1a4 <- symbolicRegression(y~x,data = data1, functionSet = function_set4)
+
+best_model_q1a1 <- results_q1a1$population[which.min(results_q1a1$fitnessValues)][[1]]
+best_model_q1a2 <- results_q1a2$population[which.min(results_q1a2$fitnessValues)][[1]]
+best_model_q1a3 <- results_q1a3$population[which.min(results_q1a3$fitnessValues)][[1]]
+best_model_q1a4 <- results_q1a4$population[which.min(results_q1a4$fitnessValues)][[1]]
+
+#Changing Search Heuristic For best function set
+results_q1a2_search_heuristic <- symbolicRegression(y~x,data = data1, functionSet = function_set2,searchHeuristic = makeTinyGpSearchHeuristic())
+best_model_q1a2_search_heuristic <- results_q1a2_search_heuristic$population[which.max(results_q1a2_search_heuristic$fitnessValues)][[1]]
+
+#Scatter plot of Y versus X for all four function sets
+#Plotting results for function set 1
+data1$predicted <- best_model_q1a1(data1$x)
+df <- melt(data1,id = "x")
+g <- ggplot(data = df,aes(x=x,y=value,colour = variable))+geom_point()+xlab("X")+ylab("Y")+scale_color_manual(labels = c("actual","predicted"),values = c("red","blue"))+ggtitle("Actual v/s Symbolic Regression Function Values for Function Set 1")+theme(plot.title = element_text(hjust = 0.5))
+plot(g)
+
+#Plotting results for function set 2
+data1$predicted <- best_model_q1a2_search_heuristic(data1$x)
+df <- melt(data1,id = "x")
+g <- ggplot(data = df,aes(x=x,y=value,colour = variable))+geom_point()+xlab("X")+ylab("Y")+scale_color_manual(labels = c("actual","predicted"),values = c("red","blue"))+ggtitle("Actual v/s Symbolic Regression Function Values for Function Set 2")+theme(plot.title = element_text(hjust = 0.5))
+plot(g)
+
+#Plotting results for function set 3
+data1$predicted <- best_model_q1a3(data1$x)
+df <- melt(data1,id = "x")
+g <- ggplot(data = df,aes(x=x,y=value,colour = variable))+geom_point()+xlab("X")+ylab("Y")+scale_color_manual(labels = c("actual","predicted"),values = c("red","blue"))+ggtitle("Actual v/s Symbolic Regression Function Values for Function Set 3")+theme(plot.title = element_text(hjust = 0.5))
+plot(g)
+
+#Plotting results for function set 4
+data1$predicted <- best_model_q1a4(data1$x)
+df <- melt(data1,id = "x")
+g <- ggplot(data = df,aes(x=x,y=value,colour = variable))+geom_point()+xlab("X")+ylab("Y")+scale_color_manual(labels = c("actual","predicted"),values = c("red","blue"))+ggtitle("Actual v/s Symbolic Regression Function Values for Function Set 4")+theme(plot.title = element_text(hjust = 0.5))
+plot(g)
+
+#Convergance Plot with Confidence Intervals
+
+progressMonitor <- function(pop,objectiveVectors,fitnessFunction,stepNumber,evaluationNumber,bestFitness,timeElapsed,...)
+{
+  global_best_function <<- c(global_best_function,bestFitness)
+  message(bestFitness)
+}
+
+#Evaluation of convergance for different iterations
+num_iterations <- 20
+global_best_function_list <- list()
+
+for(i in 1:num_iterations)
+{
+  global_best_function <<- c()
+  results_q1a2 <- symbolicRegression(y~x,data = data1,functionSet = function_set2,progressMonitor = progressMonitor)
+  global_best_function_list[[i]] <- global_best_function
+}
+
+min_length <- min(lengths(global_best_function_list))
+for (i in 1:length(global_best_function_list))
+{
+  global_best_function_list[[i]] <- global_best_function_list[[i]][1:min_length]
+}
+global_best_function_df <- as.data.frame(do.call(rbind,global_best_function_list))
+
+#PLot the convergance plot using ggplot2
+global_best_function_df$id <- c(1:num_iterations)
+global_best_function_df <- melt(global_best_function_df,id="id")
+
+global_best_function_df <- summarySE(global_best_function_df,measurevar = "value",groupvars = c("variable"))
+global_best_function_df$variable <- c(1:min_length)
+
+pd <- position_dodge(0.5)
+
+g_1a_convergence <- ggplot(global_best_function_df[c(1,10,20,30,40,50,60,70,80,90,100),], aes(x=variable, y=value)) + 
+    geom_errorbar(aes(ymin=value-ci, ymax=value+ci), width=3,size = 0.5,colour = "brown3",position = pd) +
+    geom_line(position = pd) +
+    geom_point(position = pd,shape = 21,fill="white",size = 2)+scale_x_continuous(name="Iteration Number",breaks = c(1,10,20,30,40,50,60,70,80,90,100))+ylab("Mean Fitness Value")+ggtitle("Convergence of Fitness Values with Confidence Levels at Intervals")+theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+
+```{r Q.1 b}
+
+set.seed(123)
+function_set1 <- functionSet("+","-")
+function_set2 <- functionSet("+","*","-")
+function_set3 <- functionSet("+","*","-","exp")
+function_set4 <- functionSet("+","*","-","exp","sqrt")
+
+results_q1ba1 <- symbolicRegression(y~x1+x2+x3,data = data2, functionSet = function_set1,stopCondition = makeTimeStopCondition(1*60))
+results_q1ba2 <- symbolicRegression(y~x1+x2+x3,data = data2, functionSet = function_set2,stopCondition = makeTimeStopCondition(1*60))
+results_q1ba3 <- symbolicRegression(y~x1,data = data2, functionSet = function_set3,stopCondition = makeTimeStopCondition(1*60))
+
+best_model_q1b1 <- results_q1ba1$population[which.min(results_q1ba1$fitnessValues)][[1]]
+best_model_q1b2 <- results_q1ba2$population[which.min(results_q1ba2$fitnessValues)][[1]]
+best_model_q1b3 <- results_q1ba3$population[which.min(results_q1ba3$fitnessValues)][[1]]
+best_model_q1b4 <- results_q1ba4_s1$population[which.min(results_q1ba4_s1$fitnessValues)][[1]]
+
+results_q1ba4_s1 <- symbolicRegression(y~x1+x2+x3,data = data2,searchHeuristic = makeTinyGpSearchHeuristic(),stopCondition = makeStepsStopCondition(15*60))
+
+results_q1ba4_s2 <- symbolicRegression(y~x1+x2+x3,data = data2,searchHeuristic =makeCommaEvolutionStrategySearchHeuristic(),stopCondition = makeStepsStopCondition(15*60))
+
+results_q1ba4_s3 <- symbolicRegression(y~x1+x2+x3,data = data2,searchHeuristic = makeAgeFitnessComplexityParetoGpSearchHeuristic(),stopCondition = makeStepsStopCondition(15*60))
+
+#Plotting results for function set 1
+data2$predicted <- best_model_q1b4(data2$x1,data2$x2,data2$x3)
+g <- ggplot(data2,aes(x=predicted,y=y))+geom_point()+xlab("Predicted Values")+ylab("Actual Values")+ggtitle("Actual v/s Symbolic Regression Function Values for Function Set 1")+theme(plot.title = element_text(hjust = 0.5))
+plot(g)
+
+progressMonitor <- function(pop,objectiveVectors,fitnessFunction,stepNumber,evaluationNumber,bestFitness,timeElapsed,...)
+{
+  global_best_function <<- c(global_best_function,bestFitness)
+  message(bestFitness)
+}
+
+#Evaluation of convergance for different iterations
+num_iterations <- 10
+global_best_function_list <- list()
+
+for(i in 1:num_iterations)
+{
+  global_best_function <<- c()
+  results_q1ba <- symbolicRegression(y~x1+x2+x3,data = data2,progressMonitor = progressMonitor,searchHeuristic = makeTinyGpSearchHeuristic(),makeTimeStopCondition(1*60))
+  global_best_function_list[[i]] <- global_best_function
+}
+
+min_length <- min(lengths(global_best_function_list))
+for (i in 1:length(global_best_function_list))
+{
+  global_best_function_list[[i]] <- global_best_function_list[[i]][1:min_length]
+}
+global_best_function_df <- as.data.frame(do.call(rbind,global_best_function_list))
+
+global_best_function_df$id <- c(1:num_iterations)
+global_best_function_df <- melt(global_best_function_df,id="id")
+
+global_best_function_df <- summarySE(global_best_function_df,measurevar = "value",groupvars = c("variable"))
+global_best_function_df$variable <- c(1:min_length)
+
+pd <- position_dodge(0.5)
+
+g_1b_convergence <- ggplot(global_best_function_df[c(1,200,400,600,800,1000,1200,1400,1600,1800,1934),], aes(x=variable, y=value)) + 
+    geom_errorbar(aes(ymin=value-ci, ymax=value+ci), width=30,size = 1,colour = "brown3",position = pd) +
+    geom_line(position = pd) +
+    geom_point(position = pd,shape = 21,fill="white",size = 2)+scale_x_continuous(name="Iteration Number",breaks = c(1,200,400,600,800,1000,1200,1400,1600,1800,1934))+ylab("Mean Fitness Value")+ggtitle("Convergence of Fitness Values with Confidence Levels at Intervals")+theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+
+```{r Q.2 Function for ACO}
+
+aco <- function(num_iterations,num_ants,pheromone_matrix,attractor_matrix,value,weights,capacity,alpha,beta,knapsack_length)
+{
+  epochs <- 1
+  current_capacity <- capacity
+  solution <- c()
+  population_solutions <- list()
+  profit <- 0
+  population_profit <- vector()
+  delta_pheromone <- rep(0,knapsack_length)
+  pheromone_matrix_master <- rep(1,knapsack_length)
+  attractor_matrix_master <- attractor_matrix
+  solution_epochs <- c()
+  mean_profit_ant <- c()
+  
+  while(epochs<=num_iterations)
+  {
+    population_solutions <- list()
+    population_profit <- vector()
+  for(i in 1:num_ants)
+  {
+    current_capacity <- capacity
+    profit <- 0
+    solution <- c()
+    pheromone_matrix <- pheromone_matrix_master
+    attractor_matrix <- attractor_matrix_master
+    while(current_capacity>=0)
+    {
+      #Calculate probability of choosing an object j
+      prob_obj <- ((pheromone_matrix)^alpha *    (attractor_matrix)^beta)/(dot((pheromone_matrix)^alpha,(attractor_matrix)^beta))
+      prob_cum <- cumsum(prob_obj)
+      rand <- runif(min = 0,max = 1,1)
+      for (i in 1:length(prob_cum))
+      {
+        if(rand<=prob_cum[i])
+        {
+          index <- i
+          break
+        }
+      }
+      solution <- append(solution,index)
+      current_capacity <- current_capacity - weights[index]
+      profit <- profit + value[index]
+      # Mark chosen object so that ant does not choose it again
+      pheromone_matrix[index]<- 0
+      # Mark objects who have weights which will make knapsack cross capacity
+      pheromone_matrix[which((current_capacity-weights)<0)]<- 0
+      #attractor_matrix[which((current_capacity-weights)<0)]<- 0
+      if(length(which(pheromone_matrix==0))==knapsack_length)
+      {
+        break
+      }
+    }
+    #print(solution)
+    population_solutions<- list.append(population_solutions,solution)
+    population_profit <- append(population_profit,profit)
+    #print(profit)
+  }
+  best_solution_ant <- population_solutions[which.max(population_profit)]
+  best_profit_ant <- max(population_profit)
+  mean_profit_ant[epochs] <- mean(population_profit)
+  if(epochs==1)
+  {
+    global_best_solution <- best_profit_ant
+    global_best_ant <- best_solution_ant
+  }
+  else
+  {
+    if(best_profit_ant > global_best_solution)
+    {
+      global_best_solution <- best_profit_ant
+      global_best_ant <- best_solution_ant
+    }
+  }
+  
+  #Pheromone Update Step
+  pheromone_matrix_master <- pheromone_matrix_master*0.95
+  delta_pheromone <- pheromone_update(delta_pheromone,global_best_solution,population_solutions,population_profit)
+  pheromone_matrix_master <- pheromone_matrix_master + delta_pheromone
+  epochs <- epochs + 1
+  solution_epochs[epochs-1]<- global_best_solution
+  }
+  return(list(global_best_solution,global_best_ant,solution_epochs,mean_profit_ant))
+}
+
+```
+
+```{r Pheromone Update Function}
+
+pheromone_update <- function(pheromone,global_best,ant_solutions,ant_profit)
+{
+  for(i in 1:length(ant_solutions))
+  {
+    index1 <- ant_solutions[[i]]
+    pheromone_delta <- 1/(1 + ((global_best-ant_profit[i])/global_best))
+    pheromone[index1]<- pheromone_delta
+  }
+  return(pheromone)
+}
+
+```
+
+```{r ACO Evaluation of Problem Instances}
+
+knapPI_11_100_1000 <- read.csv("C:/Users/Anirudh Shankar/Desktop/Fall 2019/Nature Inspired Computation/Homeworks/knapPI_11_100_1000.csv")
+pheromone_matrix <- rep(1,50)
+attractor_matrix <- knapPI_11_100_1000$Value/(knapPI_11_100_1000$Weights)^2
+
+ant_colony_solutions_problem1 <- aco(200,10,pheromone_matrix,attractor_matrix,knapPI_11_100_1000$Value,knapPI_11_100_1000$Weights,970,5,3,100)
+
+attractor_matrix <- knapPI_13_200_1000$Value/(knapPI_13_200_1000$Weights)^2
+ant_colony_solutions_problem2 <- aco(200,10,pheromone_matrix,attractor_matrix,knapPI_13_200_1000$Value,knapPI_13_200_1000$Weights,970,5,3,200)
+
+attractor_matrix <- knapPI_13_50_1000$Value/(knapPI_13_50_1000$Weights)^2
+ant_colony_solutions_problem3 <- aco(200,10,pheromone_matrix,attractor_matrix,knapPI_13_50_1000$Value,knapPI_13_50_1000$Weights,970,5,3,50)
+
+attractor_matrix <- knapPI_14_50_1000$Value/(knapPI_14_50_1000$Weights)^2
+ant_colony_solutions_problem4 <- aco(500,10,pheromone_matrix,attractor_matrix,knapPI_14_50_1000$Value,knapPI_14_50_1000$Weights,997,5,3,50)
+
+attractor_matrix <- knapPI_15_50_1000$Value/(knapPI_15_50_1000$Weights)^2
+ant_colony_solutions_problem5 <- aco(500,10,pheromone_matrix,attractor_matrix,knapPI_15_50_1000$Value,knapPI_15_50_1000$Weights,997,5,3,50)
+
+attractor_matrix <- knapPI_16_50_1000$Value/(knapPI_16_50_1000$Weights)^2
+ant_colony_solutions_problem6 <- aco(200,10,pheromone_matrix,attractor_matrix,knapPI_16_50_1000$Value,knapPI_16_50_1000$Weights,997,5,3,50)
+
+```
+
+
+```{r Plots for Question 2}
+
+df <- as.data.frame(ans_problem_1[[1]]$Mean_Fitness)
+colnames(df)[1]<- "Mean_Fitness_GA"
+df$Max_Fitness_GA <- ans_problem_1[[1]]$Max_Fitness
+df$Mean_Fitness_ACO <- ant_colony_solutions[[4]]
+df$Max_Fitness_ACO <- ant_colony_solutions[[3]]
+df$Iterations <- c(1:2000)
+
+df <- melt(df,id = "Iterations")
+
+g <- ggplot(df,aes(x=Iterations,y=value,colour = variable)) + geom_line()+ylab("Fitness Value")+ggtitle("Convergence plots of GA and ACO for Problem 1")+theme(plot.title = element_text(hjust = 0.5))
+
+```
+
